@@ -22,42 +22,38 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
   // Build table
   const htmlTable = $('#schedule-table')
   const title = htmlTable.parent().siblings('div').text().trim()
-  const table:string[][] = []
   const rows = Array.from($('#schedule-table > tbody > tr'))
-  rows.forEach( row => {
-    const cells = Array.from($('th,td',row))
-    table.push(cells.map( cell => $(cell).text().trim()));
-  })
+  const items:ScheduleItem[] = []
 
   // Extract start date
   const monday = new Date(Date.parse(title.replace("Schedule for week of ","")))
-  const days = table[0].slice(1).map( (_,i) => {
-    const day = DateTime.fromJSDate(monday).setZone('America/Los_Angeles');
-    day.plus({days:i-1});
+  const days = [...Array(7).keys()].map( i => {
+    const day = DateTime.fromJSDate(monday).setZone('America/Los_Angeles').plus({days:i-1}); // week headline starts at monday
     return {day:day.day,month:day.month,year:day.year}
   })
 
-  // rip into classes
-  const items:ScheduleItem[] = []
-
-
-  // Argh embedded tables
-  table.slice(1).forEach(hour => {
-    hour.slice(1).map( (text,i) => {
-      const lines = text.split('\n').map(line => line.trim()).filter(line => line !== '')
-      if(lines.length === 0) return null
-      const times = lines[0].split('-').map(t => {
-        const hm = /(\d+):(\d+)(am|pm)/.exec(t.trim()) ?? [0,0,0,'am']
-        const hour = Number(hm[1])
-        return {hour:hm[3]==='pm'?hour+12:hour,minute:Number(hm[2])}
-      })
-      const item:ScheduleItem = {
-        text: text,
-        start: `${i} ${JSON.stringify(days[i])} ${JSON.stringify(times[0])}`,
-        end: `${i} ${JSON.stringify(days[i])} ${JSON.stringify(times[1])}`,
-        title: lines[1],
-      }
-      items.push(item)
+  console.log(days)
+  rows.forEach( (row,i) => {
+    Array.from($('> td',row)).forEach((dayCell,j) => {
+      const cells = Array.from($('table > tbody > tr > td',dayCell))
+      cells.map( cell => {
+        const lines = $(cell).text().trim().split('\n').map(line => line.trim()).filter(line => line !== '')
+        if(lines.length === 0) return null
+        const times = lines[0].split('-').map(t => {
+          const hm = /(\d+):(\d+)(am|pm)/.exec(t.trim()) ?? [0,0,0,'am']
+          const hour = Number(hm[1])
+          return {...days[j],hour:hm[3]==='pm'?hour+12:hour,minute:Number(hm[2])}
+        });
+        return {
+          dow: j,
+          title: lines[1],
+          text: lines.join('\n'),
+          start: times[0],
+          end: times[1],
+        }
+      }).forEach( item => {
+        if(item !== null) items.push(item)
+      });
     })
   })
 
@@ -67,7 +63,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
   return {
     statusCode: 200,
-    body: JSON.stringify({title:title,schedule:items,days:`${days}`}),
+    body: JSON.stringify({title:title,schedule:items}),
     headers: {
       "Content-Type":"text/json",
     }
