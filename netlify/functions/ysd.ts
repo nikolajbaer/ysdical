@@ -2,18 +2,24 @@ import { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import axios from 'axios'
 import * as cheerio from 'cheerio';
 import {DateTime} from 'luxon';
+import {ICalCalendar} from 'ical-generator';
 
 type ScheduleItem = {
   text: string;
-  start:string;
-  end:string;
+  start: Date;
+  end: Date;
   title:string;
+  location: string;
 }
 
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+  const filters = event.queryStringParameters?.filters?.split('|') ?? null
+  const locations = event.queryStringParameters?.locations?.split('|') ?? ['Mission Valley YMCA','Toby Wells YMCA']
+  const tz = 'America/Los_Angeles'
+
   const response = await axios({
     method:'get',
-    url: 'https://classembed.upacedev.com/schedule/88?gym=Mission+Valley+YMCA',
+    url: `https://classembed.upacedev.com/schedule/88`,
   })
   const $ = cheerio.load(response.data)
 
@@ -28,11 +34,10 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
   // Extract start date
   const monday = new Date(Date.parse(title.replace("Schedule for week of ","")))
   const days = [...Array(7).keys()].map( i => {
-    const day = DateTime.fromJSDate(monday).setZone('America/Los_Angeles').plus({days:i-1}); // week headline starts at monday
+    const day = DateTime.fromJSDate(monday,{zone:tz}).plus({days:i-1}); // week headline starts at monday
     return {day:day.day,month:day.month,year:day.year}
   })
 
-  console.log(days)
   rows.forEach( (row,i) => {
     Array.from($('> td',row)).forEach((dayCell,j) => {
       const cells = Array.from($('table > tbody > tr > td',dayCell))
@@ -42,14 +47,14 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
         const times = lines[0].split('-').map(t => {
           const hm = /(\d+):(\d+)(am|pm)/.exec(t.trim()) ?? [0,0,0,'am']
           const hour = Number(hm[1])
-          return {...days[j],hour:hm[3]==='pm'?hour+12:hour,minute:Number(hm[2])}
+          return {...days[j],hour:(hm[3]==='pm' && hour <12)?hour+12:hour,minute:Number(hm[2])}
         });
         return {
-          dow: j,
           title: lines[1],
+          location: lines[4],
           text: lines.join('\n'),
-          start: times[0],
-          end: times[1],
+          start: DateTime.fromObject(times[0],{zone:tz}).toJSDate(),
+          end: DateTime.fromObject(times[1],{zone:tz}).toJSDate(),
         }
       }).forEach( item => {
         if(item !== null) items.push(item)
@@ -57,15 +62,31 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     })
   })
 
+  // Generate iCalendar
+  const calendar = new ICalCalendar({name:'SD Y Group Fitness Classes'})
+  // Apply filter
+  items.filter( item => {
+    if(!locations.includes(item.location)) return false
+    if(!filters) return true
+    const t = item.title.toLowerCase()
+    return filters.filter(s=>t.indexOf(s) >= 0).length > 0
+  }).forEach( item => {
+    console.log(item)
+    calendar.createEvent({
+      start: item.start,
+      end: item.end,
+      location: item.location,
+      summary: item.title,
+      description: item.text,
+    })
+  })    
 
-  // TODO apply filter
-  // TODO make iCal
-
+  // TODO good expires header
   return {
     statusCode: 200,
-    body: JSON.stringify({title:title,schedule:items}),
+    body: calendar.toString(),
     headers: {
-      "Content-Type":"text/json",
+      "Content-Type":"text/calendar",
     }
   };
 };
