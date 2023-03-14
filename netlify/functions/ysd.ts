@@ -69,14 +69,14 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
   items.filter( item => {
     if(!locations.includes(item.location)) return false
     const t = item.title.toLowerCase()
-    let filtered = true
-    if(filters && filters.filter(s=>t.indexOf(s) >= 0).length < 0)
-      filtered = false
-    if(excludes && excludes.filter(s=>t.indexOf(s) >= 0).length >= 0)
-      filtered = false
-    return filtered
+    if(filters && filters.filter(s=>t.indexOf(s) >= 0).length <= 0){
+      return false 
+    }
+    if(excludes && excludes.filter(s=>t.indexOf(s) >= 0).length > 0){
+      return false
+    }
+    return true
   }).forEach( item => {
-    console.log(item)
     calendar.createEvent({
       start: item.start,
       end: item.end,
