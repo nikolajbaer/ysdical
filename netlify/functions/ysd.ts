@@ -13,8 +13,9 @@ type ScheduleItem = {
 }
 
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
-  const filters = event.queryStringParameters?.filters?.split('|') ?? null
-  const locations = event.queryStringParameters?.locations?.split('|') ?? ['Mission Valley YMCA','Toby Wells YMCA']
+  const filters = event.queryStringParameters?.filters?.split(',') ?? null
+  const excludes = event.queryStringParameters?.excludes?.split(',') ?? null
+  const locations = event.queryStringParameters?.locations?.split(',') ?? ['Mission Valley YMCA','Toby Wells YMCA']
   const tz = 'America/Los_Angeles'
 
   const response = await axios({
@@ -67,9 +68,13 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
   // Apply filter
   items.filter( item => {
     if(!locations.includes(item.location)) return false
-    if(!filters) return true
     const t = item.title.toLowerCase()
-    return filters.filter(s=>t.indexOf(s) >= 0).length > 0
+    let filtered = true
+    if(filters && filters.filter(s=>t.indexOf(s) >= 0).length < 0)
+      filtered = false
+    if(excludes && excludes.filter(s=>t.indexOf(s) >= 0).length >= 0)
+      filtered = false
+    return filtered
   }).forEach( item => {
     console.log(item)
     calendar.createEvent({
