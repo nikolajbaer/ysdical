@@ -13,8 +13,7 @@ type ScheduleItem = {
 }
 
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
-  const filters = event.queryStringParameters?.filters?.split(',') ?? null
-  const excludes = event.queryStringParameters?.excludes?.split(',') ?? null
+  const classes = event.queryStringParameters?.classes?.split(',').map(c=>c.toLowerCase()) ?? null
   const locations = event.queryStringParameters?.locations?.split(',') ?? ['Mission Valley YMCA','Toby Wells YMCA']
   const tz = 'America/Los_Angeles'
 
@@ -68,12 +67,9 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
   // Apply filter
   items.filter( item => {
     if(!locations.includes(item.location)) return false
-    const t = item.title.toLowerCase()
-    if(filters && filters.filter(s=>t.indexOf(s) >= 0).length <= 0){
+    const t = item.title.trim().toLowerCase()
+    if(classes && classes.filter(s=>t === s).length <= 0){
       return false 
-    }
-    if(excludes && excludes.filter(s=>t.indexOf(s) >= 0).length > 0){
-      return false
     }
     return true
   }).forEach( item => {
